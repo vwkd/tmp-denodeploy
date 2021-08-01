@@ -1,17 +1,17 @@
-const quotes = [
+const data = [
   { quote: "A sunny day.", author: "Jay Three" },
   { quote: "We need! Yes!", author: "Marack Bomana" },
 ];
 
 // todo: error handling
-export async function getQuote() {
-  const index = Math.floor(Math.random() * quotes.length);
-  return quotes[index];
+export async function getData() {
+  const index = Math.floor(Math.random() * data.length);
+  return data[index];
 }
 
 // todo: error handling
 // todo: validate input
-export async function setQuote(json) {
-  quotes.push(json);
+export async function setData(json) {
+  data.push(json);
   return json;
 }

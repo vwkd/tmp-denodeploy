@@ -1,55 +1,84 @@
-const quotes = [
-  {quote: "A sunny day.", author: "Jay Three"},
-  {quote: "We need! Yes!", author: "Marack Bomana"},
-]
+import { log } from "./log.ts";
+import {
+  Application,
+  isHttpError,
+  Router,
+} from "https://deno.land/x/oak@v8.0.0/mod.ts";
+import { getData, setData } from "./data.ts";
 
-addEventListener("fetch", (event: FetchEvent) => {
-  event.respondWith(handleRequest(event.request));
-});
+// --------------------------------------------------------------------------------
 
-//todo: use pathname
-//todo: error handling
-//todo: react to content-type
-async function handleRequest(request: Request) {
+const app = new Application();
+const router = new Router();
 
-  if (request.method == "GET") {
+router
+  .get("/quote", getQuote)
+  .post("/quote", setQuote);
 
-    const quote = getQuote();
-    return new Response(JSON.stringify(quote),{
-      headers: {
-        "content-type": "application/json; charset=utf-8"
-      }
-    })
+app.use(logger);
+app.use(errorHandler);
+app.use(checkJSON);
+app.use(router.routes());
+app.use(router.allowedMethods());
 
-  } else if (request.method == "POST") {
+addEventListener("fetch", app.fetchEventHandler());
 
-    const json = await request.json();
-    const quote = setQuote(json);
-    return new Response(JSON.stringify(quote),{
-      headers: {
-        "content-type": "application/json; charset=utf-8"
-      }
-    })
-   
-  } else {
+// --------------------------------------------------------------------------------
 
-    return new Response(null, {
-      status: 405,
-      statusText: "Method Not Allowed",
-    });
-    
+async function logger(ctx, next) {
+  log.info("-->", ctx.request.method, ctx.request.url.pathname);
+  await next();
+  log.info("<--", ctx.response.status);
+}
+
+// todo: figure out why throwing error is necessary for correct response
+// why the "<--" log isn't reached, and how to then prevent "uncaught oak error" in console
+async function errorHandler(ctx, next) {
+  try {
+    await next();
+  } catch (err) {
+    if (isHttpError(err)) {
+      log.info(err.name, err.message);
+    } else {
+      log.critical(err);
+    }
+    throw err;
   }
 }
 
-// todo: error handling
-function getQuote() {
-  const index = Math.floor(Math.random() * quotes.length);
-  return quotes[index];
+async function checkJSON(ctx, next) {
+  log.debug("Accept Header:", ctx.request.accepts());
+  const wantsJSON = ctx.request.accepts("application/json") !== undefined;
+  ctx.assert(wantsJSON, 406, "Response body must be JSON");
+  await next();
 }
 
-// todo: error handling
-// todo: validate input
-function setQuote(json) {
-  quotes.push(json);
-  return json;
+async function getQuote(ctx, next) {
+  const value = await getData();
+  log.debug("Got value:", value);
+  ctx.response.body = value;
+  await next();
+}
+
+async function setQuote(ctx, next) {
+  if (ctx.request.hasBody) {
+    log.debug("Content-Type Header:", ctx.request.body().type);
+    const isJSON = ctx.request.body().type == "json";
+    ctx.assert(isJSON, 406, "Request body must be JSON");
+
+    let content;
+    try {
+      content = await ctx.request.body({ type: "json" }).value;
+    } catch (e) {
+      ctx.throw(400, "Request body is invalid JSON");
+    }
+
+    log.debug("Set value...", content);
+    const value = await setData(content);
+    log.debug("Got value:", value);
+    ctx.response.body = value;
+  } else {
+    ctx.throw(400, "Request body is empty");
+  }
+  await next();
 }
