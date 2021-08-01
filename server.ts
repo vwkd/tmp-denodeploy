@@ -1,38 +1,13 @@
+import { log } from "./log.ts";
 import {
   Application,
   isHttpError,
 } from "https://deno.land/x/oak@v8.0.0/mod.ts";
-
-// todo: outsource
-const log = {
-  debug(...args) {
-    console.log("DEBUG:", ...args);
-  },
-  info(...args) {
-    console.log("INFO:", ...args);
-  },
-  critical(...args) {
-    console.log("CRITICAL:", ...args);
-  },
-};
+import { getQuote, setQuote } from "./data.ts";
 
 const app = new Application();
-//todo: figure out why calling await next() is necessary
-//todo: add logging
 
-// todo: outsource, handleError
-app.use(async (ctx, next) => {
-  try {
-    await next();
-  } catch (err) {
-    if (isHttpError(err)) {
-      log.info(err.name, err.message);
-    } else {
-      log.critical(err); //err.message
-      throw err;
-    }
-  }
-});
+app.use(handleError);
 
 app.use(verifyAcceptHeader);
 
@@ -41,7 +16,19 @@ app.use(handlePOST);
 await app.listen("127.0.0.1:8000");
 
 // --------------------------------------------------------------------------------
-// todo: outsource
+
+async function handleError(ctx, next) {
+  try {
+    await next();
+  } catch (err) {
+    if (isHttpError(err)) {
+      log.info(err.name, err.message);
+    } else {
+      log.critical(err);
+      throw err;
+    }
+  }
+}
 
 async function verifyAcceptHeader(ctx, next) {
   log.debug("Accept Header:", ctx.request.accepts());
@@ -50,19 +37,25 @@ async function verifyAcceptHeader(ctx, next) {
   await next();
 }
 
+async function handleGET(ctx, next) {
+  const value = await getQuote();
+  log.debug("Got value:", value);
+  ctx.response.body = value;
+  await next();
+}
+
 async function handlePOST(ctx, next) {
   if (ctx.request.hasBody) {
-
     // verify Content-Type
     // todo: outsource if possible
     log.debug("Content-Type Header:", ctx.request.body().type);
     const providesJSON = ctx.request.body().type == "json";
     ctx.assert(providesJSON, 406, "Only accepts JSON");
 
-    const value = await ctx.request.body({ type: "json" }).value;
-    // todo: validate
-    // todo: save
-    log.debug("value:", value);
+    const content = await ctx.request.body({ type: "json" }).value;
+    log.debug("Set value...", content);
+    const value = await setQuote(content);
+    log.debug("Got value:", value);
     ctx.response.body = value;
   } else {
     log.debug("Missing JSON body.");
