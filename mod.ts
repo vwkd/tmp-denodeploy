@@ -77,6 +77,7 @@ async function setQuote(ctx, next) {
     const value = await setData(content);
     log.debug("Got value:", value);
     ctx.response.body = value;
+    ctx.response.status = 201;
   } else {
     ctx.throw(400, "Request body is empty");
   }
